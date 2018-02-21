@@ -17,7 +17,7 @@ def short_timings(times):
   for l in range(len(times)-1):
     dt = times[l+1][0]-times[l][0]
     if dt>1:
-      s+= "%s %.0f secs; "%(times[l][1], dt)
+      s+= "%s %.2f secs; "%(times[l][1], dt)
   return s
 #------------------------------------------- GERNERIC ACTION ---------------------------------------------------#
 

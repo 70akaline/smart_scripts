@@ -25,17 +25,22 @@ def rdmft_set_params_and_initialize(dt, Nx, Ny, U, T, C, t=-0.25, initial_guess=
     return cb.split('|')[0]
   dt.get_block_from_combo_block = get_block_from_combo_block
 
-  def get_site_index_from_combo_block(cb):
-    nblocks = len(dt.blocks)
+  def get_site_index_from_combo_block(cb):   
     cbi = dt.combo_blocks.index(cb)
-    return cbi % nblocks
+    return cbi % dt.nsites
   dt.get_site_index_from_combo_block = get_site_index_from_combo_block
 
   nsites = Nx*Ny
   dt.Us_array = {}
   for b in dt.blocks:
     dt.H0[b][:,:] = initCubicTBH(Nx, Ny, 1, 0, t, cyclic=True)
-    dt.G0_ij_iw[b] << inverse(iOmega_n*numpy.eye(dt.nsites) - dt.H0[b])
+    iws = numpy.array([iw.value for iw in dt.G0_ij_iw[b].mesh])     
+    for i in range(dt.nsites):
+      dt.G0_ij_iw[b].data[:,i,i] = iws
+    dt.G0_ij_iw[b].data[:,:,:] -= dt.H0[b]
+    for iwi, iw in enumerate(iws):  
+      dt.G0_ij_iw[b].data[iwi,:,:] = numpy.linalg.inv(dt.G0_ij_iw[b].data[iwi,:,:])
+    fit_fermionic_gf_tail(dt.G0_ij_iw[b], starting_iw=14.0, no_loc=False, overwrite_tail=False, max_order=5)
     dt.Us_array[b] = numpy.random.choice([U,0], size=nsites, p=[C, 1-C]) 
   dt.Sigma_ij_iw << 0.0
   dt.Sigma_imp_iw << 0.0
@@ -53,7 +58,11 @@ def rdmft_set_params_and_initialize(dt, Nx, Ny, U, T, C, t=-0.25, initial_guess=
   dt.dump('initial')
 
 def rdmft_set_calc(dt):
-  dt.get_Sigma_imp_tau = lambda block: get_Sigma_imp_tau_from_Gweiss_tau(dt.Sigma_imp_tau[block], dt.Gweiss_tau[block], dt.Us[block])
+  dt.get_Sigma_imp_tau = lambda block: get_Sigma_imp_tau_from_Gweiss_tau(
+    dt.Sigma_imp_tau[block], 
+    dt.Gweiss_tau[block],
+    dt.Us[block]
+  )
 
   def get_Sigma_imp_iw(cb):
     dt.Sigma_imp_iw[cb] << Fourier(dt.Sigma_imp_tau[cb]) 
@@ -61,16 +70,20 @@ def rdmft_set_calc(dt):
   
   def get_Sigma_ij_iw():
     for cb,sig in dt.Sigma_imp_iw:
+      #print "cb:",cb
       b = dt.get_block_from_combo_block(cb)
       i = dt.get_site_index_from_combo_block(cb)
+      #print "b,i:",b,i
       dt.Sigma_ij_iw[b][i,i] << sig
   dt.get_Sigma_ij_iw = get_Sigma_ij_iw
 
   dt.get_G_ij_iw = lambda: orbital_space_dyson_get_G(dt.G_ij_iw, dt.G0_ij_iw, dt.Sigma_ij_iw)
 
-  dt.get_Gweiss_iw = lambda cb: orbital_space_dyson_get_G0(dt.Gweiss_iw[cb],
-                                                           dt.G_ij_iw[dt.get_block_from_combo_block(cb)][dt.get_site_index_from_combo_block(cb),dt.get_site_index_from_combo_block(cb)],
-                                                           dt.Sigma_ij_iw[dt.get_block_from_combo_block(cb)][dt.get_site_index_from_combo_block(cb),dt.get_site_index_from_combo_block(cb)])
+  dt.get_Gweiss_iw = lambda cb: orbital_space_dyson_get_G0(
+    dt.Gweiss_iw[cb],
+    dt.G_ij_iw[dt.get_block_from_combo_block(cb)][dt.get_site_index_from_combo_block(cb),dt.get_site_index_from_combo_block(cb)],
+    dt.Sigma_imp_iw[cb]
+  )
 
   def get_Gweiss_tau(cb):
     fit_fermionic_gf_tail(dt.Gweiss_iw[cb], starting_iw=14.0, no_loc=False, overwrite_tail=True, max_order=5)
@@ -138,6 +151,8 @@ def rdmft_actions(dt):
 def rdmft_launcher(Nx, Ny, U, T, C,
                    t=-0.25, 
                    initial_guess='metal',
+                   max_its = 10,
+                   min_its = 5, 
                    iw_cutoff=30.0 ):
   beta = 1/T
   niw = int(((iw_cutoff*beta)/math.pi-1.0)/2.0)
@@ -157,8 +172,8 @@ def rdmft_launcher(Nx, Ny, U, T, C,
 
   rdmft.run(
     dt, 
-    max_its = 10,
-    min_its = 5, 
+    max_its = max_its,
+    min_its = min_its, 
     max_it_err_is_allowed = 7,
     print_final = True,
     print_current = 5,

@@ -64,4 +64,4 @@ def get_Sigma_imp_tau_from_Gweiss_tau(Sigma_imp_tau, Gweiss_tau, U):
    
   ntau = numpy.shape(Sigma_imp_tau.data)[0]
   for taui in range(ntau):
-     Sigma_imp_tau.data[taui,:,:] = -U**2.0 * (Gweiss_tau.data[taui,:,:])**2.0 * Gweiss_tau.data[-1-taui,:,:]
+     Sigma_imp_tau.data[taui,:,:] = U**2.0 * (Gweiss_tau.data[taui,:,:])**2.0 * Gweiss_tau.data[-1-taui,:,:]
