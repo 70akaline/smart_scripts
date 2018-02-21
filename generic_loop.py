@@ -147,7 +147,7 @@ class generic_loop:
       if mpi.is_master_node():
         if (it + 1) % print_current == 0: data.dump('current')
     if mpi.is_master_node():
-      if print_final: data.dump('final')      
+      if print_final: data.dump_final('final')      
 
     return err
 

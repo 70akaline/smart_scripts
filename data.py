@@ -64,7 +64,7 @@ def LoadData(self, filename, dictionary):
   del A
 
 
-def DumpData(self, filename, Qs=[], dictionary='', suffix=''):
+def DumpData(self, filename, Qs=[], exceptions=[], dictionary='', suffix=''):
   try:
     A = HDFArchive(filename,'a')
     print "data: DumpData: opened archive",filename 
@@ -75,7 +75,8 @@ def DumpData(self, filename, Qs=[], dictionary='', suffix=''):
      dct = {}  
      for Q in (Qs if (len(Qs)!=0) else vars(self).keys()):
        if not callable(vars(self)[Q]):
-         dct[Q+str(suffix)] = vars(self)[Q]
+         if not Q in exceptions:
+           dct[Q+str(suffix)] = vars(self)[Q]
      try: A[dictionary]=dct
      except: assert False, "data: DumpData: ERRROR: cannot make dictionary: "+str(dictionary)
   else:
