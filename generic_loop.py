@@ -60,7 +60,7 @@ class generic_action:
         self.err = ( (err and (not (ind in self.allowed_errors))) or self.err) #if already true, do not revert back to false        
 
       times.append((time(),"printout"))
-      self.printout(data,'it-%.2d'%it)
+      self.printout(data,'it-%.3d'%it)
 
       times.append((time(),""))
       if mpi.is_master_node():
@@ -252,11 +252,14 @@ class converger:
     self.diffs.append(max_diff)         
 
   def check_numpy_array(self):
-    max_diff = 0 
     diff = numpy.abs(self.mq() - self.mq_old)                
-    md = numpy.amax(diff)
-    if md > max_diff: max_diff = md
-    self.diffs.append(max_diff)         
+    md = numpy.amax(diff)    
+    self.diffs.append(md)         
+
+  def check_scalar(self):
+    diff = numpy.abs(self.mq() - self.mq_old)                
+    md = numpy.amax(diff)    
+    self.diffs.append(md)
 
 
 class monitor:

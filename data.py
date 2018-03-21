@@ -26,13 +26,13 @@ def AddBlockScalarData(self, blocks, Qs, vals=None):
 
 def AddNumpyData(self, Qs, shape):
   for Q in Qs:
-    vars(self)[Q] = numpy.zeros(shape)
+    vars(self)[Q] = numpy.zeros(shape, dtype=numpy.complex_)
 
 def AddBlockNumpyData(self, Qs, blocks, shape):
   for Q in Qs:
     vars(self)[Q] = {}
     for block in blocks:
-      vars(self)[Q][block] = numpy.zeros(shape)
+      vars(self)[Q][block] = numpy.zeros(shape, dtype=numpy.complex_)
 
 def AddGfData(self, Qs, blocks, Nsites, npts, beta, domain = 'iw', suffix='_loc_iw', statistic='Fermion'):
   gs = []
