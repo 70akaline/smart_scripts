@@ -1,3 +1,5 @@
+from smart_scripts import *
+
 def ipt_dw_mf_data( niw, ntau, nk, beta ):
   dt = data() 
   dt.niw = niw
@@ -22,7 +24,7 @@ def ipt_dw_mf_data( niw, ntau, nk, beta ):
 def ipt_dw_mf_set_calc(
   dt, 
   epsk = lambda kx,ky, t: 2*t*(numpy.cos(kx)+numpy.cos(ky)),
-  gk = lambda kx,ky, g: g*numpy.cos(kx)-numpy.cos(ky)  
+  gk = lambda kx,ky, g: g*(numpy.cos(kx)-numpy.cos(ky))  
 ):
   def H0(kx,ky, mu, F):
     return numpy.array([
@@ -49,9 +51,9 @@ def ipt_dw_mf_set_calc(
 
   def get_G_loc():
     for iwi, iw in enumerate(dt.iws):
-      dt.G_loc_iw['up'].data[iwi,0,0] = numpy.sum(dt.G_ab_k_iw[iwi,0,0,:,:])/dt.nk**2
+      dt.G_loc_iw['up'].data[iwi,0,0] = numpy.sum(dt.G_ab_k_iw[iwi,:,:,0,0])/(dt.nk**2)
     fit_fermionic_gf_tail(dt.G_loc_iw['up'])
-    dt.G_loc_tau << InverseFourier(dt.G_loc_iw)
+    dt.G_loc_tau['up'] << InverseFourier(dt.G_loc_iw['up'])
   dt.get_G_loc = lambda: get_G_loc()
  
   dt.get_mu = lambda: dt.mu
@@ -60,14 +62,19 @@ def ipt_dw_mf_set_calc(
     dt.mu = mu
   dt.set_mu = lambda mu: set_mu(mu)
 
-  dt.get_n = lambda: [ dt.get_G_loc(), -dt.G_loc_tau['up'].data[-1,0,0].real][1]
+  dt.get_n = lambda: [
+    fill_H0(),
+    dt.get_G(),
+    dt.get_G_loc(),
+    -dt.G_loc_tau['up'].data[-1,0,0].real
+  ][-1]
 
-  def get_F():
-    F_k_iw[:,:,:] = dt.G_ab_k_iw[:,:,:,0,1]
-    F_r_iw[:,:,:] =  [ numpy.fft.ifft2(F_k_iw[l,:,:]) for l in range(n)]
-    F_r10_iw['up'].data[:,0,0] = F_r_iw[:,1,0]
-    F_r10_tau << InverseFourier(F_r10_iw)
-    dt.F = F_r10_tau['up'].data[0,0,0].real 
+  def get_F():    
+    dt.F_k_iw[:,:,:] = dt.G_ab_k_iw[:,:,:,0,1]
+    dt.F_r_iw[:,:,:] =  [ numpy.fft.ifft2(dt.F_k_iw[iwi,:,:]) for iwi,iw in enumerate(dt.iws)]
+    dt.F_r10_iw['up'].data[:,0,0] = dt.F_r_iw[:,1,0]
+    dt.F_r10_tau['up'] << InverseFourier(dt.F_r10_iw['up'])
+    dt.F = dt.F_r10_tau['up'].data[0,0,0].real 
   
   dt.get_F = lambda: get_F()
 
@@ -81,8 +88,8 @@ def ipt_dw_mf_set_calc(
   def get_Gweiss_tau():
     impose_real_valued_in_imtime(dt.Gweiss_iw['up'])  
     fit_fermionic_gf_tail(dt.Gweiss_iw['up'])
-    dt.Gweiss_tau << InverseFourier(dt.Gweiss_iw) 
-  dt.get_Gweiss_tau = lambda: dt.get_Gweiss_tau()
+    dt.Gweiss_tau['up'] << InverseFourier(dt.Gweiss_iw['up']) 
+  dt.get_Gweiss_tau = lambda: get_Gweiss_tau()
 
   dt.get_mu0tilde = lambda: dt.mu0tilde
   def set_mu0tilde(mu0tilde):
@@ -94,24 +101,28 @@ def ipt_dw_mf_set_calc(
     -dt.Gweiss_tau['up'].data[-1,0,0].real
   ][2]
 
-  dt.get_Sigma_imp_tau = lambda: get_Sigma_imp_tau_from_Gweiss_tau(dt.Sigma_imp_tau, dt.Gweiss_tau, dt.U)
+  dt.get_Sigma_imp_tau = lambda: get_Sigma_imp_tau_from_Gweiss_tau(dt.Sigma_imp_tau['up'], dt.Gweiss_tau['up'], dt.U)
 
-  dt.get_B = lambda n, U, mu0tilde: ((1-n)*U + mu0tilde)/(n*(1-n)*U**2)      
+  dt.get_B = lambda n, U, mu0tilde: ((1.0-n)*U + mu0tilde)/(n*(1.0-n)*U**2)      
   def get_Sigma_imp_iw():      
       dt.B = dt.get_B(dt.n, dt.U, dt.mu0tilde)
-      dt.Sigma_imp_iw << Fourier(dt.Sigma_imp_tau)
-      dt.Sigma_imp_iw << dt.n*dt.U + dt.Sigma_imp_iw*inverse(1.0-dt.B*dt.Sigma_imp_iw)
+      dt.Sigma_imp_iw['up'] << Fourier(dt.Sigma_imp_tau['up'])
+      dt.Sigma_imp_iw['up'] << dt.n*dt.U + dt.Sigma_imp_iw['up']*inverse(1.0-dt.B*dt.Sigma_imp_iw['up'])
       fit_fermionic_sigma_tail(dt.Sigma_imp_iw['up'])
   dt.get_Sigma_imp_iw = lambda: get_Sigma_imp_iw()
 
-def ipt_dw_mf_set_params_and_initialize(dt, n, mu, g, T, U, fixed_n = True, ph_symmetry = True, initial_F=0.0, filename=None):
+def ipt_dw_mf_set_params_and_initialize(
+  dt,
+  n, mu, g, T, U, t, fixed_n = True, ph_symmetry = True, initial_F=0.0, initial_Gweiss_iw=None,
+  filename=None
+):
   if filename is None: 
     filename = "ipt_dw_mf"
     if fixed_n:
       filename += ".n%.4f"%n
     else:
       filename += ".mu%.4f"%mu
-    filename += "U%.4f.T%.4f"%(dt.U,dt.T)
+    filename += ".U%.4f.T%.4f"%(U,T)
     if initial_F!=0.0: filename+=".from_sc"
     else: filename+=".from_normal"
 
@@ -120,9 +131,9 @@ def ipt_dw_mf_set_params_and_initialize(dt, n, mu, g, T, U, fixed_n = True, ph_s
   dt.dump_final = lambda dct: DumpData(dt, filename, Qs=[], exceptions=[], dictionary=dct)
 
   dt.ks = numpy.linspace(0,2.0*numpy.pi,dt.nk,endpoint=False)
-  dt.n = n
+  dt.n = n #if mu is fized, n is used as initial guess
   dt.mu = mu #if fixed_n, mu is used as initial guess
-  dt.mu0tilde = 0
+  dt.mu0tilde = -mu
   dt.U = U
   dt.g =g
   dt.t = t    
@@ -130,6 +141,13 @@ def ipt_dw_mf_set_params_and_initialize(dt, n, mu, g, T, U, fixed_n = True, ph_s
   dt.fixed_n = fixed_n
   dt.ph_symmetry = ph_symmetry
 
+  dt.Sigma_imp_iw << U*n
+  if initial_Gweiss_iw is None:
+    dt.Gweiss_iw['up'] << inverse(iOmega_n - t**2*SemiCircular(2.0*t))
+  else:
+    print "starting from the provided initial_Gweiss_iw"
+    dt.Gweiss_iw['up'] << initial_Gweiss_iw
+  dt.get_Gweiss_tau()
   dt.get_H0()
 
   print "Done initializing, about to dump..."
@@ -141,34 +159,24 @@ def ipt_dw_mf_actions(dt):
       dt.get_Sigma_imp_tau()
       dt.get_Sigma_imp_iw()
 
-  def lattice(dt):   
-    dt.get_F()
-    dt.get_H0() 
-    
+  def lattice(dt):      
     if dt.fixed_n:
-      search_for_mu(
-        (lambda: dt.get_mu()),
-        (lambda: dt.set_mu()),
-        (lambda: get_n()), 
-        dt.n, 
-        dt.ph_symmetry
-      ) 
-    else: 
-      dt.get_G()      
+      search_for_mu( dt.get_mu, dt.set_mu, dt.get_n, dt.n, dt.ph_symmetry ) 
+    else:     
+      print "fixed mu calculation, doing G"
       dt.n = dt.get_n() 
+      print "n(G_loc) =",dt.n
+    dt.get_F()
+    #dt.get_H0() 
     
   def pre_impurity(dt):
-    if fixed_n and ph_symmetry and dt.n==0.5:
-      dt.get_Gweiss_iw(0.0)
-      dt.get_Gweiss_tau()
+    if dt.fixed_n and dt.ph_symmetry and dt.n==0.5:
+      print "n(Gweiss)=", dt.get_n0()
     else:
-      search_for_mu(
-        (lambda: dt.get_mu0tilde()),
-        (lambda: dt.set_mu0tilde()),
-        (lambda: get_n0()), 
-        dt.n, 
-        dt.ph_symmetry
-      ) 
+      search_for_mu( dt.get_mu0tilde, dt.set_mu0tilde, dt.get_n0, dt.n, dt.ph_symmetry ) 
+      #print "n(Gweiss)=", dt.get_n0()
+      
+     
 
   actions = [
     generic_action( 
@@ -192,7 +200,8 @@ def ipt_dw_mf_actions(dt):
       main = lattice,
       mixers = [],#[lambda data, it: 0],
       cautionaries = [],#[lambda data, it: 0], allowed_errors = [],               
-      printout = lambda data, it: (data.dump(it) if (int(it[-3:])%5==0) else 0),
+      #printout = lambda data, it: (data.dump(it) if (int(it[-3:])%5==0) else 0),
+      printout = lambda data, it: data.dump(it),
       short_timings = True
     )
   ]
@@ -216,17 +225,17 @@ def ipt_dw_mf_actions(dt):
   ]
 
   convergers = [
-    converger( monitored_quantity = lambda: dt.Sigma_imp_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_imp_iw')
-    converger( monitored_quantity = lambda: dt.G_loc_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_G_loc_iw')
+    converger( monitored_quantity = lambda: dt.Sigma_imp_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_imp_iw'),
+    converger( monitored_quantity = lambda: dt.G_loc_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_G_loc_iw'),
     converger( monitored_quantity = lambda: dt.F, accuracy=1e-4, func=converger.check_scalar, archive_name=dt.archive_name, h5key='diffs_F')
   ]
 
   return actions, monitors, convergers
 
 def ipt_dw_mf_launcher( 
-  n, mu, U, T, g, t=-0.25, initial_F=0,
+  n, mu, U, T, g, t=-0.25, initial_F=0, initial_Gweiss_iw=None,
   fixed_n = True,
-  ph_symmetry = True  
+  ph_symmetry = True,  
   nk=64,
   max_its = 10,
   min_its = 5, 
@@ -240,24 +249,24 @@ def ipt_dw_mf_launcher(
   print "Automatic niw:",niw
   dt = ipt_dw_mf_data( niw, ntau, nk, beta )  
   ipt_dw_mf_set_calc(dt)
-  ipt_dw_mf_set_params_and_initialize(dt, n, mu, g, T, U, fixed_n, ph_symmetry, initial_F)
+  ipt_dw_mf_set_params_and_initialize(dt, n, mu, g, T, U, t, fixed_n, ph_symmetry, initial_F, initial_Gweiss_iw)
   actions, monitors, convergers = ipt_dw_mf_actions(dt)
 
-  rdmft = generic_loop(
-    name = "RDMFT", 
+  dmft = generic_loop(
+    name = "IPT_DW_MF", 
     actions = actions,
     convergers = convergers,  
     monitors = monitors
   )
 
-  rdmft.run(
+  dmft.run(
     dt, 
     max_its = max_its,
     min_its = min_its, 
     max_it_err_is_allowed = 7,
     print_final = True,
-    print_current = -1,
-    start_from_action_index = 0
+    print_current = 1,
+    start_from_action_index = 1
   )
 
   return dt

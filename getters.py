@@ -2,6 +2,8 @@ from pytriqs.archive import *
 from pytriqs.gf import *
 import numpy
 
+from amoeba import amoeba
+
 #------------------ basic -------------------------------------------#
 
 def initCubicTBH(Nx, Ny, Nz, eps, t, cyclic=True):
@@ -69,23 +71,23 @@ def get_Sigma_imp_tau_from_Gweiss_tau(Sigma_imp_tau, Gweiss_tau, U):
 
 #---------------------mu search--------------------------------------------------------#
 
-def search_for_mu(get_mu, set_mu, get_n, n, ph_symmetry, accepted_mu_range=[-3.0,3.0]):
-  if mpi.is_master_node(): print "GW_mains: lattice:  n: ",n,", ph_symmetry",ph_symmetry, "accepted mu_range: ",accepted_mu_range
+def search_for_mu(get_mu, set_mu, get_n, n, ph_symmetry, accepted_mu_range=[-3.0,3.0]):  
+  print "getters: search_for_mu:  n: ",n,", ph_symmetry",ph_symmetry, "accepted mu_range: ",accepted_mu_range
 
   if (n is None) or ((n==0.5) and ph_symmetry):
-    if mpi.is_master_node(): print "no mu search to be performed! it is your duty to set the chemical potential to U/2. mu =",get_mu()
+    print "no mu search to be performed! it is your duty to set the chemical potential to U/2. mu =",get_mu()
     print 'n on the lattice : ', get_n()
   else:
-    def func(var):
+    def func(var, data=None):
       mu = var[0]        
       set_mu(mu)
       actual_n = get_n()
       val = 1.0-abs(n - actual_n)  
-      if mpi.is_master_node(): print "amoeba func call: mu: %.2f desired n: %.2f actual n: %.2f val = "%(mu,n,actual_n),val
+      print "amoeba func call: mu: %.2f desired n: %.2f actual n: %.2f val = "%(mu,n,actual_n),val
       if val != val: return -1e+6
       else: return val
 
-    if mpi.is_master_node(): print "about to do mu search:"
+    print "about to do mu search:"
 
     guesses = [get_mu(), 0.0, -0.1, -0.3, -0.4, -0.5, -0.7, 0.3, 0.5, 0.7]
     found = False  
@@ -104,20 +106,19 @@ def search_for_mu(get_mu, set_mu, get_n, n, ph_symmetry, accepted_mu_range=[-3.0
         func(varbest)
         break 
       if l+1 == len(guesses):
-        if mpi.is_master_node(): print "mu search FAILED: doing a scan..."
+        print "mu search FAILED: doing a scan..."
 
         mu_grid = numpy.linspace(-1.0,0.3,50)
         func_values = [func(var=[mu]) for mu in mu_grid]
-        if mpi.is_master_node(): 
-          print "func_values: "
-          for i in range(len(mu_grid)):
-            print "mu: ",mu_grid[i], " 1-abs(n-n): ", func_values[i]
+        print "func_values: "
+        for i in range(len(mu_grid)):
+          print "mu: ",mu_grid[i], " 1-abs(n-n): ", func_values[i]
         mui_max = numpy.argmax(func_values)
-        if mpi.is_master_node(): print "using mu: ", mu_grid[mui_max]
+        print "using mu: ", mu_grid[mui_max]
         set_mu(mu_grid[mui_max])  
         get_n()
            
-    if mpi.is_master_node() and found:
+    if found:
       print "guesses tried: ", l  
       print "mu best: ", varbest
       print "1-abs(diff n - data.n): ", funcvalue

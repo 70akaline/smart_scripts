@@ -1,3 +1,4 @@
+from amoeba import *
 from data import *
 from data import data
 from generic_loop import *
