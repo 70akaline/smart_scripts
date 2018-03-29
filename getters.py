@@ -5,7 +5,6 @@ import numpy
 from amoeba import amoeba
 
 #------------------ basic -------------------------------------------#
-
 def initCubicTBH(Nx, Ny, Nz, eps, t, cyclic=True):
   H = [[0 for j in range(Nx*Ny*Nz)] for i in range(Nx*Ny*Nz)]  
   for i in range(Nx*Ny*Nz):

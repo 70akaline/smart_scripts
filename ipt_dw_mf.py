@@ -1,5 +1,9 @@
 from smart_scripts import *
 
+import sys
+sys.path.insert(0,'/home/jaksa/parallel_dyson/build')
+from parallel_dyson import *
+
 def ipt_dw_mf_data( niw, ntau, nk, beta ):
   dt = data() 
   dt.niw = niw
@@ -7,7 +11,7 @@ def ipt_dw_mf_data( niw, ntau, nk, beta ):
   dt.nk = nk
   dt.beta = beta
   dt.T = 1.0/beta
-  dt.iws = [1j*(2.0*n+1)*pi*dt.T for n in range(-niw,niw)]
+  dt.iws = numpy.array([1j*(2.0*n+1)*pi*dt.T for n in range(-niw,niw)])
   dt.blocks = ['up']
   print "Adding loc, imp and n.n. anomalous Green's functions..."  
   AddGfData(dt, ['G_loc_iw', 'Sigma_imp_iw','Gweiss_iw', 'F_r10_iw'], dt.blocks, 1, niw, beta, domain = 'iw', suffix='', statistic='Fermion')
@@ -47,7 +51,8 @@ def ipt_dw_mf_set_calc(
         for kyi,ky in enumerate(dt.ks):
           dt.G_ab_k_iw[iwi,kxi,kyi,:,:] = numpy.linalg.inv(iw*numpy.eye(2)-dt.H0[kxi,kyi]-nambu_sig)
 
-  dt.get_G = lambda: get_G()
+  #dt.get_G = lambda: get_G()
+  dt.get_G = lambda: parallel_get_Nambu_G(dt.iws, dt.H0, dt.Sigma_imp_iw['up'].data[:,0,0], dt.G_ab_k_iw)
 
   def get_G_loc():
     for iwi, iw in enumerate(dt.iws):
@@ -127,7 +132,7 @@ def ipt_dw_mf_set_params_and_initialize(
     else: filename+=".from_normal"
 
   dt.archive_name = filename
-  dt.dump = lambda dct: DumpData(dt, filename, Qs=[], exceptions=[], dictionary=dct)
+  dt.dump = lambda dct: DumpData(dt, filename, Qs=[], exceptions=['G_ab_k_iw','F_k_iw','F_r_iw'], dictionary=dct)
   dt.dump_final = lambda dct: DumpData(dt, filename, Qs=[], exceptions=[], dictionary=dct)
 
   dt.ks = numpy.linspace(0,2.0*numpy.pi,dt.nk,endpoint=False)
@@ -221,7 +226,17 @@ def ipt_dw_mf_actions(dt):
       monitored_quantity = lambda: dt.F, 
       h5key = 'F_vs_it', 
       archive_name = dt.archive_name
-    ) 
+    ),
+    monitor(
+      monitored_quantity = lambda: dt.mu, 
+      h5key = 'mu_vs_it', 
+      archive_name = dt.archive_name
+    ),
+    monitor(
+      monitored_quantity = lambda: dt.mu0tilde, 
+      h5key = 'mu0tilde_vs_it', 
+      archive_name = dt.archive_name
+    )  
   ]
 
   convergers = [
@@ -249,7 +264,7 @@ def ipt_dw_mf_launcher(
   print "Automatic niw:",niw
   dt = ipt_dw_mf_data( niw, ntau, nk, beta )  
   ipt_dw_mf_set_calc(dt)
-  ipt_dw_mf_set_params_and_initialize(dt, n, mu, g, T, U, t, fixed_n, ph_symmetry, initial_F, initial_Gweiss_iw)
+  ipt_dw_mf_set_params_and_initialize(dt, n, mu, g, T, U, t, fixed_n, ph_symmetry, initial_F, initial_Gweiss_iw, filename)
   actions, monitors, convergers = ipt_dw_mf_actions(dt)
 
   dmft = generic_loop(
