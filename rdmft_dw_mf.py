@@ -3,13 +3,13 @@ import sys
 sys.path.insert(0,'/home/jaksa/parallel_inverse/build')
 from parallel_inverse import *
 
-def initSquareNabmuCubicTBH(Nx, Ny, eps, t, F, cyclic=True):
+def initSquareNabmuCubicTBH(Nx, Ny, eps, t, F, g, cyclic=True):
   nsites = Nx*Ny
   H = numpy.zeros((2*nsites,2*nsites))
   H[:nsites,:nsites] = initCubicTBH(Nx, Ny, 1, eps, t, cyclic)
   H[nsites:,nsites:] = initCubicTBH(Nx, Ny, 1, -eps, -t, cyclic)
-  H[:nsites,nsites:] = F
-  H[nsites:,:nsites] = F
+  H[:nsites,nsites:] = g*F
+  H[nsites:,:nsites] = g*F
 
 def get_nns(Nx,Ny,l): #find linear indices of the 4 nearest neighbors of site with linear index l ona cyclic square cluster Nx x Ny
   i = l % Nx
@@ -49,7 +49,7 @@ def get_F(F, F_iw, F_tau, G_iajb_iw, Nx,Ny, forbidden_list=[]):
   nsites = Nx*Ny   
   for nnbb, f_iw in F_iw:
     llnn = nnbb.split("-")
-    l, lnn = llnn[0], llnn[1] 
+    l, lnn = int(llnn[0]), int(llnn[1])
     if (l in forbidden_list) or (lnn in forbidden_list): continue
     f_iw << G_iajb_iw['up'][l+nsites,lnn]
     fit_fermionic_gf_tail(f_iw, starting_iw=14.0, no_loc=False, overwrite_tail=False, max_order=5)    
@@ -63,7 +63,10 @@ def rdmft_data( niw, ntau, Nx,Ny, beta, blocks = ['up'] ):
   dt.niw = niw
   dt.ntau = ntau
   dt.nsites = nsites
+  dt.Nx = Nx
+  dt.Ny = Ny
   dt.beta = beta
+  dt.T = 1.0/beta
   dt.blocks = blocks 
   print "Adding lattice Green's functions..."  
   #AddGfData(dt, ['G_ij_iw', 'Sigma_ij_iw', 'G0_ij_iw'], blocks, nsites, niw, beta, domain = 'iw', suffix='', statistic='Fermion')
@@ -71,20 +74,25 @@ def rdmft_data( niw, ntau, Nx,Ny, beta, blocks = ['up'] ):
   AddGfData(dt, ['G_iajb_iw'], blocks, 2*nsites, niw, beta, domain = 'iw', suffix='', statistic='Fermion') #optimizing further, we don't even need G0_ij_iw
   dt.nn_bond_blocks = create_nn_bond_blocks(Nx,Ny)
   AddGfData(dt, ['F_iw'], dt.nn_bond_blocks, 1, niw, beta, domain = 'iw', suffix='', statistic='Fermion')
-  AddGfData(dt, ['F_tau'], dt.nn_bond_blocks, 1, niw, beta, domain = 'tau', suffix='', statistic='Fermion')
+  AddGfData(dt, ['F_tau'], dt.nn_bond_blocks, 1, ntau, beta, domain = 'tau', suffix='', statistic='Fermion')
  
   print "Adding imp Green's functions..."  
   dt.combo_blocks = [ "%s|%.4d"%(block,i) for i in range(nsites) for block in blocks]
   AddGfData(dt, ['Sigma_imp_iw','Gweiss_iw'], dt.combo_blocks, 1, niw, beta, domain = 'iw', suffix='', statistic='Fermion')
   AddGfData(dt, ['Sigma_imp_tau','Gweiss_tau'], dt.combo_blocks, 1, ntau, beta, domain = 'tau', suffix='', statistic='Fermion')
   print "Adding imp numpy arrays..."  
-  AddBlockNumpyData(dt, ['H0'], blocks, (2*nsites,2*nsites))
+  AddNumpyData(dt, ['H0'], (2*nsites,2*nsites))
   AddNumpyData(dt, ['F'], (nsites,nsites))
   AddBlockScalarData(dt, dt.combo_blocks, ['mus','Us'], vals=None)
   print "Done preparing containers"  
   return dt
 
-def rdmft_set_params_and_initialize(dt, Nx, Ny, U, T, C, t=-0.25, Us_array=None, initial_guess='metal', initial_F=0.0, filename=None):
+def rdmft_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial_guess='metal', initial_F=0.0, filename=None):
+  dt.U = U
+  dt.C = C
+  dt.t = t
+  dt.g = g
+ 
   if filename is None: 
     filename = "rdmft.%dx%d.U%.4f.T%.4f.C%.7f.from_%s_%s"\
                 %(Nx,Ny,U,T,C,initial_guess,('sc' if (initial_F!=0.0) else 'normal'))
@@ -128,13 +136,13 @@ def rdmft_set_params_and_initialize(dt, Nx, Ny, U, T, C, t=-0.25, Us_array=None,
     else:
       dt.Us_array[b] = Us_array[:]  
     #dt.Us_array[b] = numpy.random.choice([U,0], size=nsites, p=[C, 1-C]) 
-    print "Making H0..."
-    
-    F = initialize_F(Nx,Ny, forbidden_list=[l for l,u in enumerate(dt.Us['up']) if u==0.0], value=initial_F)
-    dt.H0[b][:,:] = initSquareNabmuCubicTBH(Nx, Ny, 0, t, F, cyclic=True)
-    if initial_guess=='metal':
-      print "Making G0, storing in G..."
-      dt.get_G_ij_iw()
+  print "Making H0..."   
+  dt.forbidden_list = [l for l,u in enumerate(dt.Us_array['up']) if u==0.0]
+  dt.F = initialize_F(Nx,Ny, forbidden_list=dt.forbidden_list, value=initial_F)
+  dt.get_H0()
+  if initial_guess=='metal':
+    print "Making G0, storing in G..."
+    dt.get_G_ij_iw()
   #dt.Sigma_ij_iw << 0.0
 
   #dt.G_ij_iw << dt.G0_ij_iw
@@ -175,26 +183,29 @@ def rdmft_set_calc(dt):
   #    dt.Sigma_ij_iw[b][i,i] << sig
   #dt.get_Sigma_ij_iw = get_Sigma_ij_iw
 
-  def memory_optimized_orbital_space_dyson():
-    for b in dt.blocks:
-      iws = numpy.array([iw.value for iw in dt.G_ij_iw[b].mesh]) 
-      for iwi, iw in enumerate(iws):
-        #dt.G_ij_iw[b].data[iwi,:,:] = numpy.linalg.inv(dt.G0_ij_iw[b].data[iwi,:,:])
-        dt.G_ij_iw[b].data[iwi,:,:] = -dt.H0[b][:,:]
-      for i in range(dt.nsites):
-        dt.G_ij_iw[b].data[:,i,i] += iws - dt.Sigma_imp_iw["%s|%.4d"%(b,i)].data[:,0,0]
-      #dt.G_ij_iw[b] << inverse(dt.G_ij_iw[b]) 
-      for iwi, iw in enumerate(iws):
-        dt.G_ij_iw[b].data[iwi,:,:] = numpy.linalg.inv(dt.G_ij_iw[b].data[iwi,:,:])
-      impose_real_valued_in_imtime(dt.G_ij_iw[b])
-      impose_equilibrium(dt.G_ij_iw[b])  
-      fit_fermionic_gf_tail(dt.G_ij_iw[b], starting_iw=14.0, no_loc=False, overwrite_tail=False, max_order=5)
+  #def memory_optimized_orbital_space_dyson():
+  #  for b in dt.blocks:
+  #    iws = numpy.array([iw.value for iw in dt.G_ij_iw[b].mesh]) 
+  #    for iwi, iw in enumerate(iws):
+  #      #dt.G_ij_iw[b].data[iwi,:,:] = numpy.linalg.inv(dt.G0_ij_iw[b].data[iwi,:,:])
+  #      dt.G_ij_iw[b].data[iwi,:,:] = -dt.H0[b][:,:]
+  #    for i in range(dt.nsites):
+  #      dt.G_ij_iw[b].data[:,i,i] += iws - dt.Sigma_imp_iw["%s|%.4d"%(b,i)].data[:,0,0]
+  #    #dt.G_ij_iw[b] << inverse(dt.G_ij_iw[b]) 
+  #    for iwi, iw in enumerate(iws):
+  #      dt.G_ij_iw[b].data[iwi,:,:] = numpy.linalg.inv(dt.G_ij_iw[b].data[iwi,:,:])
+  #    impose_real_valued_in_imtime(dt.G_ij_iw[b])
+  #    impose_equilibrium(dt.G_ij_iw[b])  
+  #    fit_fermionic_gf_tail(dt.G_ij_iw[b], starting_iw=14.0, no_loc=False, overwrite_tail=False, max_order=5)
+
+  dt.get_F = lambda: get_F(dt.F, dt.F_iw, dt.F_tau, dt.G_iajb_iw, dt.Nx, dt.Ny, forbidden_list=dt.forbidden_list)
+  dt.get_H0 = lambda: initSquareNabmuCubicTBH(dt.Nx, dt.Ny, 0, dt.t, dt.F, dt.g, cyclic=True) 
 
   def parallel_optimized_orbital_space_dyson():
     for b in dt.blocks:
       iws = numpy.array([iw.value for iw in dt.G_ij_iw[b].mesh]) 
       for iwi, iw in enumerate(iws):
-        dt.G_ij_iw[b].data[iwi,:,:] = -dt.H0[b][:,:]
+        dt.G_ij_iw[b].data[iwi,:,:] = -dt.H0[:,:]
       for i in range(dt.nsites):
         dt.G_ij_iw[b].data[:,i,i] += iws - dt.Sigma_imp_iw["%s|%.4d"%(b,i)].data[:,0,0]
         dt.G_ij_iw[b].data[:,i+dt.nsites,i+dt.nsites] += iws + numpy.conj(dt.Sigma_imp_iw["%s|%.4d"%(b,i)].data[:,0,0])
@@ -240,6 +251,10 @@ def rdmft_actions(dt):
     #dt.get_Sigma_ij_iw()
     dt.get_G_ij_iw()
 
+  def post_lattice(dt):    
+    dt.get_F()
+    dt.get_H0()
+
   def pre_impurity(dt):
     for cb in dt.combo_blocks:
        dt.get_Gweiss_iw(cb) 
@@ -271,7 +286,16 @@ def rdmft_actions(dt):
       cautionaries = [],#[lambda data, it: 0], allowed_errors = [],               
       printout = lambda data, it: (data.dump(it) if (int(it[-3:])%5==0) else 0),
       short_timings = True
+    ),
+    generic_action( 
+      name = "post_lattice",
+      main = post_lattice,
+      mixers = [],#[lambda data, it: 0],
+      cautionaries = [],#[lambda data, it: 0], allowed_errors = [],               
+      printout = lambda data, it: 0,
+      short_timings = True
     )
+
   ]
 
   monitors = [
@@ -286,28 +310,30 @@ def rdmft_actions(dt):
     #converger( monitored_quantity = lambda: dt.G_ij_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_G_ij_iw'),
     #converger( monitored_quantity = lambda: dt.Sigma_ij_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_ij_iw')
     converger( monitored_quantity = lambda: dt.Sigma_imp_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_imp_iw')
+    converger( monitored_quantity = lambda: dt.F_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_F_iw')
   ]
 
   return actions, monitors, convergers
 
-def rdmft_launcher(Nx, Ny, U, T, C,
+def rdmft_launcher(Nx, Ny, U, T, C, 
                    Us_array = None, 
                    t=-0.25, 
                    initial_guess='metal',
+                   initial_F=1.0,
                    max_its = 10,
                    min_its = 5, 
                    iw_cutoff=30.0,
                    filename=None ):
   print "------------------- Welcome to RDMFT! -------------------------"
-  beta = 1/T
+  beta = 1.0/T
   niw = int(((iw_cutoff*beta)/math.pi-1.0)/2.0)
   ntau = 3*niw
   print "Automatic niw:",niw
   
   nsites = Nx*Ny 
-  dt = rdmft_data( niw, ntau, nsites, beta )
+  dt = rdmft_data( niw, ntau, Nx, Ny, beta )
   rdmft_set_calc(dt)
-  rdmft_set_params_and_initialize(dt, Nx, Ny, U, T, C, t, Us_array, initial_guess, filename)
+  rdmft_set_params_and_initialize(dt, U, C, t, Us_array, initial_guess, initial_F, filename)
   actions, monitors, convergers = rdmft_actions(dt)
 
   rdmft = generic_loop(
