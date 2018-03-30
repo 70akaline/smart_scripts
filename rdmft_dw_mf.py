@@ -3,13 +3,13 @@ import sys
 sys.path.insert(0,'/home/jaksa/parallel_inverse/build')
 from parallel_inverse import *
 
-def initSquareNabmuCubicTBH(Nx, Ny, eps, t, F, g, cyclic=True):
+def initSquareNabmuCubicTBH(H0, Nx, Ny, eps, t, F, g, cyclic=True):
   nsites = Nx*Ny
-  H = numpy.zeros((2*nsites,2*nsites))
-  H[:nsites,:nsites] = initCubicTBH(Nx, Ny, 1, eps, t, cyclic)
-  H[nsites:,nsites:] = initCubicTBH(Nx, Ny, 1, -eps, -t, cyclic)
-  H[:nsites,nsites:] = g*F
-  H[nsites:,:nsites] = g*F
+  #H0 = numpy.zeros((2*nsites,2*nsites))
+  H0[:nsites,:nsites] = initCubicTBH(Nx, Ny, 1, eps, t, cyclic)
+  H0[nsites:,nsites:] = initCubicTBH(Nx, Ny, 1, -eps, -t, cyclic)
+  H0[:nsites,nsites:] = g*F
+  H0[nsites:,:nsites] = g*F
 
 def get_nns(Nx,Ny,l): #find linear indices of the 4 nearest neighbors of site with linear index l ona cyclic square cluster Nx x Ny
   i = l % Nx
@@ -18,7 +18,7 @@ def get_nns(Nx,Ny,l): #find linear indices of the 4 nearest neighbors of site wi
   if i+1==Nx: lrn = j*Nx
   if i==0: lln = (j+1)*Nx-1
   if j+1==Ny: lbn = i
-  if j==0: lbn = (Ny-1)*Nx + i
+  if j==0: ltn = (Ny-1)*Nx + i
   return [lrn,lln,lbn,ltn]
 
 def create_nn_list(Nx,Ny):
@@ -34,6 +34,7 @@ def create_nn_bond_blocks(Nx,Ny):
     nns = get_nns(Nx,Ny,l)
     for nni in [0,2]:
       nn_bond_blocks.append("%.4d-%.4d"%(l,nns[nni]))
+  return nn_bond_blocks
 
 def initialize_F(Nx,Ny, forbidden_list=[], value=1.0):
   nsites = Nx*Ny 
@@ -44,20 +45,26 @@ def initialize_F(Nx,Ny, forbidden_list=[], value=1.0):
     for lnni,lnn in enumerate(lnns):
       if lnn in forbidden_list: continue
       F[l,lnn] = (1 if (lnni<2) else -1)*value
+  return F
 
 def get_F(F, F_iw, F_tau, G_iajb_iw, Nx,Ny, forbidden_list=[]):
-  nsites = Nx*Ny   
+  #print "get_F:" 
+  nsites = Nx*Ny 
+  #print "nsites:", nsites  
   for nnbb, f_iw in F_iw:
     llnn = nnbb.split("-")
     l, lnn = int(llnn[0]), int(llnn[1])
+    #print "l,lnn:",l,lnn
     if (l in forbidden_list) or (lnn in forbidden_list): continue
     f_iw << G_iajb_iw['up'][l+nsites,lnn]
-    fit_fermionic_gf_tail(f_iw, starting_iw=14.0, no_loc=False, overwrite_tail=False, max_order=5)    
+    #fit_fermionic_gf_tail(f_iw, starting_iw=14.0, no_loc=True, overwrite_tail=False, max_order=5)    
     F_tau[nnbb] << InverseFourier(f_iw)
-    F[l,lnn] = F_tau[nnbb].data[0,0,0]
-    F[lnn,l] = F_tau[nnbb].data[0,0,0]
+    #print "F_tau[nnbb].data[0,0,0].real",F_tau[nnbb].data[0,0,0].real 
+    F[l,lnn] = F_tau[nnbb].data[0,0,0].real
+    F[lnn,l] = F_tau[nnbb].data[0,0,0].real
+      
 
-def rdmft_data( niw, ntau, Nx,Ny, beta, blocks = ['up'] ):
+def rdmft_dw_mf_data( niw, ntau, Nx,Ny, beta, blocks = ['up'] ):
   nsites = Nx*Ny
   dt = data() 
   dt.niw = niw
@@ -72,6 +79,7 @@ def rdmft_data( niw, ntau, Nx,Ny, beta, blocks = ['up'] ):
   #AddGfData(dt, ['G_ij_iw', 'Sigma_ij_iw', 'G0_ij_iw'], blocks, nsites, niw, beta, domain = 'iw', suffix='', statistic='Fermion')
   #AddGfData(dt, ['G_ij_iw', 'G0_ij_iw'], blocks, nsites, niw, beta, domain = 'iw', suffix='', statistic='Fermion') #optimizing, we don't really need Sigma_ij_iw
   AddGfData(dt, ['G_iajb_iw'], blocks, 2*nsites, niw, beta, domain = 'iw', suffix='', statistic='Fermion') #optimizing further, we don't even need G0_ij_iw
+  dt.iws = numpy.array([iw.value for iw in dt.G_iajb_iw[blocks[0]].mesh]) 
   dt.nn_bond_blocks = create_nn_bond_blocks(Nx,Ny)
   AddGfData(dt, ['F_iw'], dt.nn_bond_blocks, 1, niw, beta, domain = 'iw', suffix='', statistic='Fermion')
   AddGfData(dt, ['F_tau'], dt.nn_bond_blocks, 1, ntau, beta, domain = 'tau', suffix='', statistic='Fermion')
@@ -87,7 +95,7 @@ def rdmft_data( niw, ntau, Nx,Ny, beta, blocks = ['up'] ):
   print "Done preparing containers"  
   return dt
 
-def rdmft_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial_guess='metal', initial_F=0.0, filename=None):
+def rdmft_dw_mf_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial_guess='metal', initial_F=0.0, filename=None):
   dt.U = U
   dt.C = C
   dt.t = t
@@ -95,9 +103,9 @@ def rdmft_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial
  
   if filename is None: 
     filename = "rdmft.%dx%d.U%.4f.T%.4f.C%.7f.from_%s_%s"\
-                %(Nx,Ny,U,T,C,initial_guess,('sc' if (initial_F!=0.0) else 'normal'))
+                %(dt.Nx,dt.Ny,U,dt.T,C,initial_guess,('sc' if (initial_F!=0.0) else 'normal'))
   dt.archive_name = filename
-  dt.dump = lambda dct: DumpData(dt, filename, Qs=[], exceptions=['G_ij_iw'], dictionary=dct)
+  dt.dump = lambda dct: DumpData(dt, filename, Qs=[], exceptions=['G_iajb_iw'], dictionary=dct)
   dt.dump_final = lambda dct: DumpData(dt, filename, Qs=[], exceptions=[], dictionary=dct)
 
   def get_block_from_combo_block(cb):
@@ -112,7 +120,9 @@ def rdmft_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial
   print "Filling zero in Sigma_imp_iw"
   dt.Sigma_imp_iw << 0.0
 
-  nsites = Nx*Ny
+  nsites=dt.nsites
+  Nx = dt.Nx
+  Ny = dt.Ny
   dt.Us_array = {}
   for b in dt.blocks:
     if Us_array is None:
@@ -138,11 +148,15 @@ def rdmft_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial
     #dt.Us_array[b] = numpy.random.choice([U,0], size=nsites, p=[C, 1-C]) 
   print "Making H0..."   
   dt.forbidden_list = [l for l,u in enumerate(dt.Us_array['up']) if u==0.0]
-  dt.F = initialize_F(Nx,Ny, forbidden_list=dt.forbidden_list, value=initial_F)
+  print "forbidden_list:",dt.forbidden_list
+  print "initial_F:", initial_F  
+  dt.F[:,:] = initialize_F(Nx,Ny, forbidden_list=dt.forbidden_list, value=initial_F)
+  #print "initialized F:",dt.F
   dt.get_H0()
+  #print "initialized H0:",dt.H0
   if initial_guess=='metal':
     print "Making G0, storing in G..."
-    dt.get_G_ij_iw()
+    dt.get_G_iajb_iw()
   #dt.Sigma_ij_iw << 0.0
 
   #dt.G_ij_iw << dt.G0_ij_iw
@@ -152,7 +166,7 @@ def rdmft_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial
     site_index = get_site_index_from_combo_block(cb)
     dt.mus[cb] = 0.0
     dt.Us[cb] = dt.Us_array[block][site_index]
-    if initial_guess=='metal': dt.Gweiss_iw[cb] << dt.G_ij_iw[block][site_index,site_index]
+    if initial_guess=='metal': dt.Gweiss_iw[cb] << dt.G_iajb_iw[block][site_index,site_index]
     elif initial_guess=='atomic': dt.Gweiss_iw[cb] << inverse(iOmega_n)  
     else: 
       try:
@@ -163,7 +177,7 @@ def rdmft_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial
   print "Done initializing, about to dump..."
   dt.dump('initial')
 
-def rdmft_set_calc(dt):
+def rdmft_dw_mf_set_calc(dt):
   dt.get_Sigma_imp_tau = lambda block: get_Sigma_imp_tau_from_Gweiss_tau(
     dt.Sigma_imp_tau[block], 
     dt.Gweiss_tau[block],
@@ -199,19 +213,20 @@ def rdmft_set_calc(dt):
   #    fit_fermionic_gf_tail(dt.G_ij_iw[b], starting_iw=14.0, no_loc=False, overwrite_tail=False, max_order=5)
 
   dt.get_F = lambda: get_F(dt.F, dt.F_iw, dt.F_tau, dt.G_iajb_iw, dt.Nx, dt.Ny, forbidden_list=dt.forbidden_list)
-  dt.get_H0 = lambda: initSquareNabmuCubicTBH(dt.Nx, dt.Ny, 0, dt.t, dt.F, dt.g, cyclic=True) 
+  dt.get_H0 = lambda: initSquareNabmuCubicTBH(dt.H0, dt.Nx, dt.Ny, 0, dt.t, dt.F, dt.g, cyclic=True) 
 
   def parallel_optimized_orbital_space_dyson():
     for b in dt.blocks:
-      iws = numpy.array([iw.value for iw in dt.G_ij_iw[b].mesh]) 
+      iws = numpy.array([iw.value for iw in dt.G_iajb_iw[b].mesh]) 
       for iwi, iw in enumerate(iws):
-        dt.G_ij_iw[b].data[iwi,:,:] = -dt.H0[:,:]
+        dt.G_iajb_iw[b].data[iwi,:,:] = -dt.H0[:,:]
       for i in range(dt.nsites):
-        dt.G_ij_iw[b].data[:,i,i] += iws - dt.Sigma_imp_iw["%s|%.4d"%(b,i)].data[:,0,0]
-        dt.G_ij_iw[b].data[:,i+dt.nsites,i+dt.nsites] += iws + numpy.conj(dt.Sigma_imp_iw["%s|%.4d"%(b,i)].data[:,0,0])
-    invert(dt.G_ij_iw)
-    parallel_impose_real_valued_in_imtime(dt.G_ij_iw)
-    parallel_impose_equillibrium(dt.G_ij_iw)
+        dt.G_iajb_iw[b].data[:,i,i] += iws - dt.Sigma_imp_iw["%s|%.4d"%(b,i)].data[:,0,0]
+        dt.G_iajb_iw[b].data[:,i+dt.nsites,i+dt.nsites] += iws + numpy.conj(dt.Sigma_imp_iw["%s|%.4d"%(b,i)].data[:,0,0])
+    invert(dt.G_iajb_iw)
+    parallel_impose_real_valued_in_imtime(dt.G_iajb_iw)
+    parallel_impose_equillibrium(dt.G_iajb_iw)
+
     #for b in dt.blocks:
       #impose_real_valued_in_imtime(dt.G_ij_iw[b])
     #  impose_equilibrium(dt.G_ij_iw[b])  
@@ -225,12 +240,12 @@ def rdmft_set_calc(dt):
     #                overwrite_tail=False)
 
   #dt.get_G_ij_iw = lambda: orbital_space_dyson_get_G(dt.G_ij_iw, dt.G0_ij_iw, dt.Sigma_ij_iw)
-  dt.get_G_ij_iw = parallel_optimized_orbital_space_dyson
-  #dt.get_G_ij_iw = memory_optimized_orbital_space_dyson    
+  dt.get_G_iajb_iw = parallel_optimized_orbital_space_dyson
+  #dt.get_G_iajb_iw = memory_optimized_orbital_space_dyson    
 
   dt.get_Gweiss_iw = lambda cb: orbital_space_dyson_get_G0(
     dt.Gweiss_iw[cb],
-    dt.G_ij_iw[dt.get_block_from_combo_block(cb)][dt.get_site_index_from_combo_block(cb),dt.get_site_index_from_combo_block(cb)],
+    dt.G_iajb_iw[dt.get_block_from_combo_block(cb)][dt.get_site_index_from_combo_block(cb),dt.get_site_index_from_combo_block(cb)],
     dt.Sigma_imp_iw[cb]
   )
 
@@ -240,7 +255,7 @@ def rdmft_set_calc(dt):
     dt.Gweiss_tau[cb] << InverseFourier(dt.Gweiss_iw[cb]) 
   dt.get_Gweiss_tau = get_Gweiss_tau
 
-def rdmft_actions(dt):
+def rdmft_dw_mf_actions(dt):
   def impurity(dt):
     for cb in dt.combo_blocks:
       if dt.Us[cb]==0.0: continue
@@ -249,7 +264,7 @@ def rdmft_actions(dt):
 
   def lattice(dt):
     #dt.get_Sigma_ij_iw()
-    dt.get_G_ij_iw()
+    dt.get_G_iajb_iw()
 
   def post_lattice(dt):    
     dt.get_F()
@@ -304,18 +319,23 @@ def rdmft_actions(dt):
 #      h5key = 'ImG_%s%s_iw_0_vs_it'%(i,i), 
 #      archive_name = dt.archive_name
 #    ) for i in range(dt.nsites)[]
+    monitor(
+      monitored_quantity = lambda: numpy.amax(numpy.abs(dt.F.real)), 
+      h5key = 'Fmax_vs_it', 
+      archive_name = dt.archive_name
+    )
   ]
 
   convergers = [
     #converger( monitored_quantity = lambda: dt.G_ij_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_G_ij_iw'),
     #converger( monitored_quantity = lambda: dt.Sigma_ij_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_ij_iw')
-    converger( monitored_quantity = lambda: dt.Sigma_imp_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_imp_iw')
+    converger( monitored_quantity = lambda: dt.Sigma_imp_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_imp_iw'),
     converger( monitored_quantity = lambda: dt.F_iw, accuracy=1e-4, func=None, archive_name=dt.archive_name, h5key='diffs_F_iw')
   ]
 
   return actions, monitors, convergers
 
-def rdmft_launcher(Nx, Ny, U, T, C, 
+def rdmft_dw_mf_launcher(Nx, Ny, U, T, C, g,
                    Us_array = None, 
                    t=-0.25, 
                    initial_guess='metal',
@@ -331,19 +351,19 @@ def rdmft_launcher(Nx, Ny, U, T, C,
   print "Automatic niw:",niw
   
   nsites = Nx*Ny 
-  dt = rdmft_data( niw, ntau, Nx, Ny, beta )
-  rdmft_set_calc(dt)
-  rdmft_set_params_and_initialize(dt, U, C, t, Us_array, initial_guess, initial_F, filename)
-  actions, monitors, convergers = rdmft_actions(dt)
+  dt = rdmft_dw_mf_data( niw, ntau, Nx, Ny, beta )
+  rdmft_dw_mf_set_calc(dt)
+  rdmft_dw_mf_set_params_and_initialize(dt, U, C, g, t, Us_array, initial_guess, initial_F, filename)
+  actions, monitors, convergers = rdmft_dw_mf_actions(dt)
 
-  rdmft = generic_loop(
+  rdmft_dw_mf = generic_loop(
     name = "RDMFT", 
     actions = actions,
     convergers = convergers,  
     monitors = monitors
   )
 
-  rdmft.run(
+  rdmft_dw_mf.run(
     dt, 
     max_its = max_its,
     min_its = min_its, 
