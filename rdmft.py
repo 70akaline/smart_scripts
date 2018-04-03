@@ -30,7 +30,7 @@ def rdmft_set_params_and_initialize(dt, Nx, Ny, U, T, C, t=-0.25, Us_array=None,
                 %(Nx,Ny,U,T,C,initial_guess)
   dt.archive_name = filename
   dt.dump = lambda dct: DumpData(dt, filename, Qs=[], exceptions=['G_ij_iw'], dictionary=dct)
-  dt.dump_final = lambda dct: DumpData(dt, filename, Qs=[], exceptions=[], dictionary=dct)
+  dt.dump_final = lambda dct: DumpData(dt, filename, Qs=[], exceptions=['G_ij_iw'], dictionary=dct)
 
   def get_block_from_combo_block(cb):
     return cb.split('|')[0]

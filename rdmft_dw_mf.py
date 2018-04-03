@@ -95,7 +95,7 @@ def rdmft_dw_mf_data( niw, ntau, Nx,Ny, beta, blocks = ['up'] ):
   print "Done preparing containers"  
   return dt
 
-def rdmft_dw_mf_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial_guess='metal', initial_F=0.0, filename=None):
+def rdmft_dw_mf_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, initial_guess='metal', initial_Sigma_imp_iw=None, initial_F=0.0, filename=None):
   dt.U = U
   dt.C = C
   dt.t = t
@@ -106,7 +106,7 @@ def rdmft_dw_mf_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, i
                 %(dt.Nx,dt.Ny,U,dt.T,C,initial_guess,('sc' if (initial_F!=0.0) else 'normal'))
   dt.archive_name = filename
   dt.dump = lambda dct: DumpData(dt, filename, Qs=[], exceptions=['G_iajb_iw'], dictionary=dct)
-  dt.dump_final = lambda dct: DumpData(dt, filename, Qs=[], exceptions=[], dictionary=dct)
+  dt.dump_final = lambda dct: DumpData(dt, filename, Qs=[], exceptions=['G_iajb_iw'], dictionary=dct)
 
   def get_block_from_combo_block(cb):
     return cb.split('|')[0]
@@ -154,8 +154,12 @@ def rdmft_dw_mf_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, i
   #print "initialized F:",dt.F
   dt.get_H0()
   #print "initialized H0:",dt.H0
+  if not (initial_Sigma_imp_iw is None):
+    print "Filling in Sigma_imp_iw from initial_Sigma_imp_iw..."
+    dt.Sigma_imp_iw << initial_Sigma_imp_iw
+
   if initial_guess=='metal':
-    print "Making G0, storing in G..."
+    print "Making G..."
     dt.get_G_iajb_iw()
   #dt.Sigma_ij_iw << 0.0
 
@@ -166,14 +170,15 @@ def rdmft_dw_mf_set_params_and_initialize(dt, U, C, g, t=-0.25, Us_array=None, i
     site_index = get_site_index_from_combo_block(cb)
     dt.mus[cb] = 0.0
     dt.Us[cb] = dt.Us_array[block][site_index]
-    if initial_guess=='metal': dt.Gweiss_iw[cb] << dt.G_iajb_iw[block][site_index,site_index]
-    elif initial_guess=='atomic': dt.Gweiss_iw[cb] << inverse(iOmega_n)  
-    else: 
-      try:
-        LoadData(dt, initial_guess, 'current')
-      except: 
-        assert False, 'initial guess '+str(initial_guess)+' not implemented, or corrupted filename!'
-    dt.get_Gweiss_tau(cb)
+    if initial_Sigma_imp_iw is None:
+      if initial_guess=='metal': dt.Gweiss_iw[cb] << dt.G_iajb_iw[block][site_index,site_index]
+      elif initial_guess=='atomic': dt.Gweiss_iw[cb] << inverse(iOmega_n)  
+      else: 
+        try:
+          LoadData(dt, initial_guess, 'current')
+        except: 
+          assert False, 'initial guess '+str(initial_guess)+' not implemented, or corrupted filename!'
+      dt.get_Gweiss_tau(cb)
   print "Done initializing, about to dump..."
   dt.dump('initial')
 
@@ -323,6 +328,11 @@ def rdmft_dw_mf_actions(dt):
       monitored_quantity = lambda: numpy.amax(numpy.abs(dt.F.real)), 
       h5key = 'Fmax_vs_it', 
       archive_name = dt.archive_name
+    ),
+    monitor(
+      monitored_quantity = lambda: ( numpy.sum(numpy.abs(dt.F[numpy.nonzero(dt.F)].real) )/numpy.count_nonzero(dt.F) ), 
+      h5key = 'Favg_vs_it', 
+      archive_name = dt.archive_name
     )
   ]
 
@@ -339,6 +349,7 @@ def rdmft_dw_mf_launcher(Nx, Ny, U, T, C, g,
                    Us_array = None, 
                    t=-0.25, 
                    initial_guess='metal',
+                   initial_Sigma_imp_iw=None,
                    initial_F=1.0,
                    max_its = 10,
                    min_its = 5, 
@@ -353,7 +364,7 @@ def rdmft_dw_mf_launcher(Nx, Ny, U, T, C, g,
   nsites = Nx*Ny 
   dt = rdmft_dw_mf_data( niw, ntau, Nx, Ny, beta )
   rdmft_dw_mf_set_calc(dt)
-  rdmft_dw_mf_set_params_and_initialize(dt, U, C, g, t, Us_array, initial_guess, initial_F, filename)
+  rdmft_dw_mf_set_params_and_initialize(dt, U, C, g, t, Us_array, initial_guess, initial_Sigma_imp_iw, initial_F, filename)
   actions, monitors, convergers = rdmft_dw_mf_actions(dt)
 
   rdmft_dw_mf = generic_loop(
@@ -370,7 +381,7 @@ def rdmft_dw_mf_launcher(Nx, Ny, U, T, C, g,
     max_it_err_is_allowed = 7,
     print_final = True,
     print_current = 1,
-    start_from_action_index = 1
+    start_from_action_index = (1 if (initial_Sigma_imp_iw is None) else 0)
   )
 
   return dt
