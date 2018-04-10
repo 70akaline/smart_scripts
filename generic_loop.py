@@ -109,6 +109,7 @@ class generic_loop:
     for monitor in self.monitors:
       monitor.reset()
 
+    err = False
     for it in range(max_its):
       if mpi.is_master_node(): print "------------------- iteration ",it,"/",max_its,"---------------------"
       times = []
@@ -245,10 +246,15 @@ class converger:
   def check_gf(self):
     max_diff = 0 
     mq = self.mq() 
-    for key, m in mq: 
-      diff = abs(m.data[:,:,:] - self.mq_old[key].data[:,:,:])                
-      md = numpy.amax(diff)
-      if md > max_diff: max_diff = md
+    try:
+      for key, m in mq: 
+        diff = abs(m.data[:,:,:] - self.mq_old[key].data[:,:,:])                
+        md = numpy.amax(diff)
+        if md > max_diff: max_diff = md
+    except:
+        diff = abs(mq.data[:,:,:] - self.mq_old.data[:,:,:])                
+        md = numpy.amax(diff)
+        if md > max_diff: max_diff = md 
     self.diffs.append(max_diff)         
 
   def check_numpy_array(self):

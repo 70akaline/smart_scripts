@@ -9,10 +9,12 @@ from generic_loop import mixer
 from tail_fitters import *
 from getters import *
 from cautionaries import *
+from impurity_solvers import solvers
 from rdmft import *
 from dw_mf import *
 from ipt_dw_mf import *
 from rdmft_dw_mf import *
+from cellular import *
 
 #from pytriqs.plot.mpl_interface import *
 from pytriqs.archive import *
