@@ -74,6 +74,9 @@ def impose_su2_and_latt_inv_on_nambu_Sigma(Sigma_IaJb_imp_iw, Us):
 
 def impose_ph_symmetry_on_square_cluster_nambu_Sigma(Sigma_IaJb_imp_iw, Us):
   print "impose_ph_symmetry_on_square_cluster_nambu_Sigma"
+  if (numpy.unique(Us).size!=1): #!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    print "skipping this step before we are 100% sure tha assumption is correct!"
+    return
   niws, nI, nI = numpy.shape(Sigma_IaJb_imp_iw.data)
   assert nI % 2 ==0, "in Nambu space nI must be even"
   nsites = nI/2
@@ -109,6 +112,35 @@ def impose_su2_and_inversion_symmetry_and_rotation_antisymmetry_on_anomalous_Sig
     Sigma_IaJb_imp_iw.data[:,i+nsites,j] = -tot
 
   for i,j in [(0,3),(3,0),(1,2),(2,1)]:
+    Sigma_IaJb_imp_iw.data[:,i,j+nsites] = 0.0
+    Sigma_IaJb_imp_iw.data[:,i+nsites,j] = 0.0
+  for i in range(nsites):
+    Sigma_IaJb_imp_iw.data[:,i,i+nsites] = 0.0
+    Sigma_IaJb_imp_iw.data[:,i+nsites,i] = 0.0
+
+def impose_su2_and_cluster_symmetry_and_rotation_antisymmetry_on_anomalous_Sigma(Sigma_IaJb_imp_iw):
+  print "impose_cluster_symmetry_and_rotation_antisymmetry_on_anomalous_Sigma"
+  print "this assumes Us[3] == 0 !!!!"
+  niws, nI, nI = numpy.shape(Sigma_IaJb_imp_iw.data)
+  assert nI % 2 ==0, "in Nambu space nI must be even"
+  nsites = nI/2
+  assert nsites==4, "bigger clusters don't guarantee this property!"
+  tot = numpy.zeros((niws),dtype=numpy.complex_)
+  for i,j in [(0,1),(1,0)]:    
+    tot+=Sigma_IaJb_imp_iw.data[:,i,j+nsites].real
+    tot+=Sigma_IaJb_imp_iw.data[:,i+nsites,j].real
+  for i,j in [(0,2),(2,0)]:
+    tot-=Sigma_IaJb_imp_iw.data[:,i,j+nsites].real
+    tot-=Sigma_IaJb_imp_iw.data[:,i+nsites,j].real
+  tot/=8.0
+  for i,j in [(0,1),(1,0)]:    
+    Sigma_IaJb_imp_iw.data[:,i,j+nsites] = tot
+    Sigma_IaJb_imp_iw.data[:,i+nsites,j] = tot
+  for i,j in [(0,2),(2,0)]:
+    Sigma_IaJb_imp_iw.data[:,i,j+nsites] = -tot
+    Sigma_IaJb_imp_iw.data[:,i+nsites,j] = -tot
+
+  for i,j in [(0,3),(3,0),(1,2),(2,1),(2,3),(3,2),(1,3),(3,1)]:
     Sigma_IaJb_imp_iw.data[:,i,j+nsites] = 0.0
     Sigma_IaJb_imp_iw.data[:,i+nsites,j] = 0.0
   for i in range(nsites):

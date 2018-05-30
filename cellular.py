@@ -544,7 +544,7 @@ def cellular_launcher(
       get_sig(), 
       ( symmetrize_cluster_nambu_Sigma(dt.Sigma_IaJb_imp_iw, get_identical_pair_sets(Nx,Ny), su2=True, Us=Us)
         if ((numpy.unique(Us).size==1)and(initial_afm==0.0)) else
-        ( impose_su2_and_latt_inv_on_nambu_Sigma(Sigma_IaJb_imp_iw, Us)
+        ( impose_su2_and_latt_inv_on_nambu_Sigma(dt.Sigma_IaJb_imp_iw, Us)
           if (initial_afm==0.0) else
           None
         )
@@ -556,7 +556,10 @@ def cellular_launcher(
       impose_real_valued_in_imtime(dt.Sigma_IaJb_imp_iw),
       ( impose_su2_and_inversion_symmetry_and_rotation_antisymmetry_on_anomalous_Sigma(dt.Sigma_IaJb_imp_iw)
         if ((numpy.unique(Us).size==1)and(initial_afm==0.0)) else
-        None
+        ( impose_su2_and_cluster_symmetry_and_rotation_antisymmetry_on_anomalous_Sigma(dt.Sigma_IaJb_imp_iw) 
+          if ((Us[3]==0.0) and (numpy.unique(Us[:-1]).size==1) and (len(Us)==4) and (initial_afm==0.0)) else
+          None
+        )
       )
     ]
 
