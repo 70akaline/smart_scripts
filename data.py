@@ -76,9 +76,12 @@ def DumpData(self, filename, Qs=[], exceptions=[], dictionary='', suffix=''):
      for Q in (Qs if (len(Qs)!=0) else vars(self).keys()):
        print "dumping ",Q,":",
        if isinstance(vars(self)[Q], (Gf,BlockGf)) or (not callable(vars(self)[Q])):
-         if not Q in exceptions:
-           dct[Q+str(suffix)] = vars(self)[Q]
-         else: print "in exceptions!"
+         if not (vars(self)[Q] is None):
+           if not Q in exceptions:
+             dct[Q+str(suffix)] = vars(self)[Q]
+             print "...ok"        
+           else: print "in exceptions!"
+         else: print "is None!"
        else: print "callable and not Gf"
      A[dictionary]=dct
      #try: A[dictionary]=dct

@@ -13,16 +13,16 @@ def iaipt_data( niw, ntau, ks, field_ids, T ):
   dt.T = T
   dt.iws = numpy.array([1j*(2.0*n+1)*pi*dt.T for n in range(-niw,niw)])
   print "Adding loc, imp and n.n. anomalous Green's functions..."  
-  dt.G_loc_iw = GfImFreq(indices = range(dt.nfields), beta = beta, n_points = niw, statistic = 'Fermion')
-  dt.G_loc_iw = GfImTime(indices = range(dt.nfields), beta = beta, n_points = ntau, statistic = 'Fermion')
-  AddGfData(self, ['Sigma_imp_iw','Gweiss_iw'], field_ids, 1, niw, dt.beta, domain = 'iw', suffix='', statistic='Fermion')
-  AddGfData(self, ['Sigma_imp_tau','Gweiss_tau'], field_ids, 1, ntau, dt.beta, domain = 'tau', suffix='', statistic='Fermion')
+  dt.G_loc_iw = GfImFreq(indices = range(dt.nfields), beta = dt.beta, n_points = niw, statistic = 'Fermion')
+  dt.G_loc_tau = GfImTime(indices = range(dt.nfields), beta = dt.beta, n_points = ntau, statistic = 'Fermion')
+  AddGfData(dt, ['Sigma_imp_iw','Gweiss_iw'], field_ids, 1, niw, dt.beta, domain = 'iw', suffix='', statistic='Fermion')
+  AddGfData(dt, ['Sigma_imp_tau','Gweiss_tau'], field_ids, 1, ntau, dt.beta, domain = 'tau', suffix='', statistic='Fermion')
 
   print "Adding lattice Green's functions..."  
-  dt.G_ab_k_iw =  numpy.zeros((2*niw, nk,nk, dt.nfields, dt.nfields), dtype=numpy.complex_)
-  dt.H0k =  numpy.zeros( (nk,nk, dt.nfields,dt.nfields), dtype=numpy.complex_ )
+  dt.G_ab_k_iw =  numpy.zeros((2*niw, dt.nk,dt.nk, dt.nfields, dt.nfields), dtype=numpy.complex_)
+  dt.H0k =  numpy.zeros( (dt.nk,dt.nk, dt.nfields,dt.nfields), dtype=numpy.complex_ )
   for Q in ['Us','ns','mu0tildes','Bs']:
-    vars(dt)[Q] = dict.fromkeys(field_ids)
+    vars(dt)[Q] = dict.fromkeys(field_ids,0)
   print "Done preparing containers"  
   return dt
 
@@ -41,7 +41,7 @@ def iaipt_set_calc(
         for kyi,ky in enumerate(dt.ks):
           dt.G_ab_k_iw[iwi,kxi,kyi,:,:] = numpy.linalg.inv(\
             iw*numpy.eye(dt.nfields)\
-            - dt.H0[kxi,kyi,:,:]\
+            - dt.H0k[kxi,kyi,:,:]\
             - numpy.diag( [Sigma.data[iwi,0,0] for field_id, Sigma in dt.Sigma_imp_iw] )\
           )
         
@@ -72,7 +72,7 @@ def iaipt_set_calc(
     dt.Gweiss_iw[field_id],
     dt.G_loc_iw[dt.field_ids.index(field_id),dt.field_ids.index(field_id)],
     dt.Sigma_imp_iw[field_id],
-    dt.mu0tildes[dt.field_ids.index(field_id)]
+    dt.mu0tildes[field_id]
   )
     
   def get_Gweiss_tau(field_id):
@@ -91,13 +91,13 @@ def iaipt_set_calc(
     -dt.Gweiss_tau[field_id].data[-1,0,0].real
   ][-1]
 
-  dt.get_Sigma_imp_tau = lambda field_id: get_Sigma_imp_tau_from_Gweiss_tau(dt.Sigma_imp_tau[field_id], dt.Gweiss_tau[field_id], dt.Us[dt.field_ids.index(field_id)])
+  dt.get_Sigma_imp_tau = lambda field_id: get_Sigma_imp_tau_from_Gweiss_tau(dt.Sigma_imp_tau[field_id], dt.Gweiss_tau[field_id], dt.Us[field_id])
 
   dt.get_B = lambda n, U, mu0tilde: ((1.0-n)*U + mu0tilde)/(n*(1.0-n)*U**2)      
   def get_Sigma_imp_iw(field_id):
     dt.Bs[field_id] = dt.get_B(dt.ns[field_id], dt.Us[field_id], dt.mu0tildes[field_id])
     dt.Sigma_imp_iw[field_id] << Fourier(dt.Sigma_imp_tau[field_id])
-    dt.Sigma_imp_iw[field_id] << dt.ns[field_id]*dt.Us[field_id] + dt.Sigma_imp_iw[field_id]*inverse(1.0-dt.B*dt.Sigma_imp_iw[field_id])
+    dt.Sigma_imp_iw[field_id] << dt.ns[field_id]*dt.Us[field_id] + dt.Sigma_imp_iw[field_id]*inverse(1.0-dt.Bs[field_id]*dt.Sigma_imp_iw[field_id])
     fit_fermionic_sigma_tail(dt.Sigma_imp_iw[field_id], starting_iw=starting_iw)
   dt.get_Sigma_imp_iw = lambda field_id: get_Sigma_imp_iw(field_id)
 
@@ -117,7 +117,7 @@ def iaipt_actions(dt, accr):
       False
     ) 
     print "n(G_loc) =",dt.get_n()
-    dt.ns[:] = dt.get_ns()
+    dt.ns = dt.get_ns()
     
   def pre_impurity(dt):
     for field_id in dt.field_ids:
@@ -186,7 +186,7 @@ def iaipt_actions(dt, accr):
 
   convergers = [
     converger( monitored_quantity = lambda: dt.Sigma_imp_iw, accuracy=accr, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_imp_iw'),
-    converger( monitored_quantity = lambda: dt.G_loc_iw.data, accuracy=accr, func=converger.check_numpy_array, archive_name=dt.archive_name, h5key='diffs_G_loc_iw')
+    converger( monitored_quantity = lambda: dt.G_loc_iw, accuracy=accr, func=None, archive_name=dt.archive_name, h5key='diffs_G_loc_iw')
   ]
 
   return actions, monitors, convergers
@@ -204,14 +204,16 @@ def iaipt_set_params_and_initialize(
   dt.dump_final = lambda dct: DumpData(dt, filename, Qs=[], exceptions=[], dictionary=dct)
 
   dt.n = n #if mu is fized, n is used as initial guess
-  dt.mu = initial_mu #if fixed_n, mu is used as initial guess
+  dt.mu = 0.0#initial_mu #if fixed_n, mu is used as initial 
   dt.get_H0k()
   for field_id in dt.field_ids:
-    dt.mu0tildes[field_id] = -dt.mu
-    dt.Us[field_id] = Us[field_ids]
-    dt.Sigma_imp_iw[field_id] << Us[field_id]*n/dt.nfields + float(initial_guess=='atomic')*inverse(iOmega_n)
+    dt.mu0tildes[field_id] = 0 
+    dt.Us[field_id] = Us[field_id]
+    dt.Sigma_imp_iw[field_id] << float(initial_guess=='insulator')*inverse(iOmega_n)
   dt.get_n()
   dt.ns = dt.get_ns()
+  dt.mu = dt.Us[dt.field_ids[0]]/2.0 #!!!!!!!!!!1
+  #dt.mu0tildes = dict.fromkeys(dt.field_ids, -initial_mu) 
   print "Done initializing, about to dump..."
   dt.dump('initial')
 
@@ -219,26 +221,34 @@ def iaipt_set_params_and_initialize(
 def iaipt_launcher( 
   field_ids,
   get_H0k,
-  Us
+  Us,
   n, 
   T, 
   starting_iw,
   ks,
-  initial_guess
+  initial_guess,
+  initial_mu,
   max_its,
   min_its, 
   accr,
   filename
 ):
   print "------------------- Welcome to IAIPT! -------------------------"
+  print "field_ids:",field_ids
+  print "Us:",Us
+  print "n:",n
+  print "T:",T
+  print "accr:",accr
+
   beta = 1.0/T
+  iw_cutoff= 2.0*starting_iw
   niw = int(((iw_cutoff*beta)/math.pi-1.0)/2.0)
   ntau = 3*niw
   print "Automatic niw:",niw
   dt = iaipt_data( niw, ntau, ks, field_ids, T )  
   iaipt_set_calc(dt, get_H0k, starting_iw)
-  actions, monitors, convergers = iaipt_actions(dt, accr)
   iaipt_set_params_and_initialize( dt, n, Us, initial_mu, initial_guess, filename)
+  actions, monitors, convergers = iaipt_actions(dt, accr)
 
   dmft = generic_loop(
     name = "IPT_DW_MF", 

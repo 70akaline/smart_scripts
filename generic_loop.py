@@ -232,15 +232,17 @@ class converger:
     self.get_initial()
     
     if mpi.is_master_node(): 
-      print "converger: ",self.h5key," : ", self.diffs[-1]
+      print "converger: ",self.h5key," : ", self.diffs[-1],"desired: ",self.accuracy,
       if (not (self.archive_name is None)):
         A = HDFArchive(self.archive_name)
         A[self.h5key] = self.diffs
         del A
 
     if self.diffs[-1]<self.accuracy:
+      print "converged!"
       return True
-
+    else:
+      print "not yet"
     return False
 
   def check_gf(self):
