@@ -191,7 +191,7 @@ def iaipt_actions(dt, accr):
 
   return actions, monitors, convergers
 
-def ipt_dw_mf_set_params_and_initialize(
+def iaipt_set_params_and_initialize(
   dt,
   n, 
   Us, 
@@ -216,7 +216,7 @@ def ipt_dw_mf_set_params_and_initialize(
   dt.dump('initial')
 
 
-def ipt_dw_mf_launcher( 
+def iaipt_launcher( 
   field_ids,
   get_H0k,
   Us
