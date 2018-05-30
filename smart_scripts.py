@@ -12,6 +12,7 @@ from cautionaries import *
 from impurity_solvers import solvers
 from rdmft import *
 from dw_mf import *
+from iaipt import *
 from ipt_dw_mf import *
 from rdmft_dw_mf import *
 from cellular import *
