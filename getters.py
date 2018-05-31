@@ -70,7 +70,7 @@ def get_Sigma_imp_tau_from_Gweiss_tau(Sigma_imp_tau, Gweiss_tau, U):
 
 #---------------------mu search--------------------------------------------------------#
 
-def search_for_mu(get_mu, set_mu, get_n, n, ph_symmetry, accepted_mu_range=[-3.0,3.0]):  
+def search_for_mu(get_mu, set_mu, get_n, n, ph_symmetry, accepted_mu_range=[-20.0,20.0]):  
   print "getters: search_for_mu:  n: ",n,", ph_symmetry",ph_symmetry, "accepted mu_range: ",accepted_mu_range
 
   if (n is None) or ((n==0.5) and ph_symmetry):

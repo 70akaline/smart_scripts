@@ -121,13 +121,14 @@ def iaipt_actions(dt, accr):
     
   def pre_impurity(dt):
     for field_id in dt.field_ids:
-      search_for_mu( 
-        partial(dt.get_mu0tilde, field_id=field_id),
-        partial(dt.set_mu0tilde, field_id=field_id),
-        partial(dt.get_n0, field_id=field_id),
-        dt.ns[field_id],
-        False
-      ) 
+      if (dt.Us[field_id]!=0.0):
+        search_for_mu( 
+          partial(dt.get_mu0tilde, field_id=field_id),
+          partial(dt.set_mu0tilde, field_id=field_id),
+          partial(dt.get_n0, field_id=field_id),
+          dt.ns[field_id],
+          False
+        ) 
 
   actions = [
     generic_action( 
@@ -185,7 +186,7 @@ def iaipt_actions(dt, accr):
   ] )
 
   convergers = [
-    converger( monitored_quantity = lambda: dt.Sigma_imp_iw, accuracy=accr, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_imp_iw'),
+    #converger( monitored_quantity = lambda: dt.Sigma_imp_iw, accuracy=accr, func=None, archive_name=dt.archive_name, h5key='diffs_Sigma_imp_iw'),
     converger( monitored_quantity = lambda: dt.G_loc_iw, accuracy=accr, func=None, archive_name=dt.archive_name, h5key='diffs_G_loc_iw')
   ]
 
@@ -208,8 +209,9 @@ def iaipt_set_params_and_initialize(
   dt.get_H0k()
   for field_id in dt.field_ids:
     dt.mu0tildes[field_id] = 0 
-    dt.Us[field_id] = Us[field_id]
-    dt.Sigma_imp_iw[field_id] << float(initial_guess=='insulator')*inverse(iOmega_n)
+    try: dt.Us[field_id] = Us[field_id]
+    except: dt.Us[field_id] = 0.0 
+    dt.Sigma_imp_iw[field_id] << float((initial_guess=='insulator')and(dt.Us[field_id]!=0.0))*inverse(iOmega_n)
   dt.get_n()
   dt.ns = dt.get_ns()
   dt.mu = dt.Us[dt.field_ids[0]]/2.0 #!!!!!!!!!!1
