@@ -1,7 +1,11 @@
 from smart_scripts import *
 import sys
 sys.path.insert(0,'/home/jaksa/parallel_inverse/build')
-from parallel_inverse import *
+
+try:
+  from parallel_inverse import *
+except:
+  print "no parallel inverse module installed, cannot use optimization in rdmft!!"
 
 def rdmft_data( niw, ntau, nsites, beta, blocks = ['up'] ):
   dt = data() 
