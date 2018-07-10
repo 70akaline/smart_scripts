@@ -1,8 +1,11 @@
 from smart_scripts import *
 
 import sys
-sys.path.insert(0,'/home/jaksa/parallel_dyson/build')
-from parallel_dyson import *
+try:
+  sys.path.insert(0,'/home/jaksa/parallel_dyson/build')
+  from parallel_dyson import *
+except:
+  print "parallel_dyson module not found, this optimization not available in ipt_dw_mf!"
 
 def ipt_dw_mf_data( niw, ntau, nk, beta ):
   dt = data() 
