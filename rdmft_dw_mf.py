@@ -1,7 +1,10 @@
 from smart_scripts import *
 import sys
-sys.path.insert(0,'/home/jaksa/parallel_inverse/build')
-from parallel_inverse import *
+try:
+  sys.path.insert(0,'/home/jaksa/parallel_inverse/build')
+  from parallel_inverse import *
+except:
+  print "parallel_inverse module not imstalled, this optimization not available in rmdft_dw_mf!!"
 
 def initSquareNabmuCubicTBH(H0, Nx, Ny, eps, t, F, g, cyclic=True):
   nsites = Nx*Ny
