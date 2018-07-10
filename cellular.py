@@ -2,8 +2,12 @@ import pytriqs.utility.mpi as mpi
 import socket
 from smart_scripts import *
 from copy import deepcopy
-from parallel_dyson import parallel_get_Nambu_G_for_cellular
-from parallel_dyson import optimized_parallel_get_Nambu_G_for_cellular
+try:
+  from parallel_dyson import parallel_get_Nambu_G_for_cellular
+  from parallel_dyson import optimized_parallel_get_Nambu_G_for_cellular
+except:
+  print "no parallel_dyson module installed, parallel optimizations not available in cellular!"
+
 
 use_cthyb=False
 use_Kspace_nambu_cthyb=False
