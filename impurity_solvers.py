@@ -23,8 +23,12 @@ from copy import deepcopy
 #from cthyb_spin import Solver
 
 #from triqs_cthyb import *
-from triqs_cthyb import Solver as CthybSolver
-
+try:
+  from triqs_cthyb import Solver as CthybSolver
+except:
+  if mpi.is_master_node():
+    print "CTHYB not installed"
+  
 try:
   from triqs_ctint import SolverCore as Solver
 except:

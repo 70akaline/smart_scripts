@@ -24,9 +24,9 @@ def short_timings(times):
 class generic_action:
   def __init__( self,
                 name = "generic action",
-                main = lambda data: 0,
-                mixers = [lambda data, it: 0],
-                cautionaries = [lambda data, it: 0], allowed_errors = [],               
+                main = lambda data: 0, #or lambda data, it: 0
+                mixers = [],#[lambda data, it: 0],
+                cautionaries = [], allowed_errors = [], #[lambda data, it: 0]              
                 printout = lambda data, it: 0,
                 short_timings = True):
                  
@@ -45,8 +45,11 @@ class generic_action:
     if mpi.is_master_node(): print "-------------------------", self.name
 
     try:     
-      times = [(time(),"main")]          
-      self.main(data)
+      times = [(time(),"main")]
+      try:          
+        self.main(data, it)
+      except: 
+        self.main(data) 
 
       times.append((time(),"mixing"))
       for mixer in self.mixers:
@@ -140,6 +143,7 @@ class generic_loop:
    
       if converged and it>=min_its:
         if mpi.is_master_node(): print "=-=-=-=-=-=-=-=-=-=-=-=-", self.name, " converged!!"
+        data.converged = True
         break 
       if err and (it>max_it_err_is_allowed):
         if mpi.is_master_node(): print "=-=-=-=-=-=-=-=-=-=-=-=-", self.name, " erroneous!!! exiting..."
@@ -170,7 +174,8 @@ class mixer:
     for rule in self.rules:
       if loop_index>=rule[0]:
         ratio = rule[1]
-
+    if ratio>0.0: 
+      if mpi.is_master_node(): print "mixer: mixing with ratio:",ratio
     if self.func is None:
       self.mix_gf(ratio)
     else:

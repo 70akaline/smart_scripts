@@ -68,6 +68,13 @@ def get_Sigma_imp_tau_from_Gweiss_tau(Sigma_imp_tau, Gweiss_tau, U):
   ntau = numpy.shape(Sigma_imp_tau.data)[0]
   Sigma_imp_tau.data[:,:,:] = U**2.0 * (Gweiss_tau.data[:,:,:])**2.0 * Gweiss_tau.data[::-1,:,:]
 
+def alternative_get_Sigma_imp_tau_from_Gweiss_tau(Sigma_imp_tau, Gweiss_tau, U):
+  assert numpy.shape(Sigma_imp_tau.data)==numpy.shape(Gweiss_tau.data), "get_Sigma_imp_tau_from_Gweiss_tau: Sigma and Gweiss unequal data structure"
+   
+  ntau = numpy.shape(Sigma_imp_tau.data)[0]
+  Sigma_imp_tau.data[:,:,:] = 0.25 * U**2.0 * Gweiss_tau.data[:,:,:]
+
+
 #---------------------mu search--------------------------------------------------------#
 
 def search_for_mu(get_mu, set_mu, get_n, n, ph_symmetry, accepted_mu_range=[-20.0,20.0]):  

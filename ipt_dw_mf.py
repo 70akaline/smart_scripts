@@ -58,8 +58,9 @@ def ipt_dw_mf_set_calc(
   dt.get_G = lambda: parallel_get_Nambu_G(dt.iws, dt.H0, dt.Sigma_imp_iw['up'].data[:,0,0], dt.G_ab_k_iw)
 
   def get_G_loc():
-    for iwi, iw in enumerate(dt.iws):
-      dt.G_loc_iw['up'].data[iwi,0,0] = numpy.sum(dt.G_ab_k_iw[iwi,:,:,0,0])/(dt.nk**2)
+    #for iwi, iw in enumerate(dt.iws):
+    #  dt.G_loc_iw['up'].data[iwi,0,0] = numpy.sum(dt.G_ab_k_iw[iwi,:,:,0,0])/(dt.nk**2)
+    dt.G_loc_iw['up'].data[:,0,0] = numpy.sum(dt.G_ab_k_iw[:,:,:,0,0],axis=(1,2))/(dt.nk**2)
     fit_fermionic_gf_tail(dt.G_loc_iw['up'])
     dt.G_loc_tau['up'] << InverseFourier(dt.G_loc_iw['up'])
   dt.get_G_loc = lambda: get_G_loc()
@@ -110,6 +111,7 @@ def ipt_dw_mf_set_calc(
   ][2]
 
   dt.get_Sigma_imp_tau = lambda: get_Sigma_imp_tau_from_Gweiss_tau(dt.Sigma_imp_tau['up'], dt.Gweiss_tau['up'], dt.U)
+  #dt.get_Sigma_imp_tau = lambda: alternative_get_Sigma_imp_tau_from_Gweiss_tau(dt.Sigma_imp_tau['up'], dt.Gweiss_tau['up'], dt.U)
 
   dt.get_B = lambda n, U, mu0tilde: ((1.0-n)*U + mu0tilde)/(n*(1.0-n)*U**2)      
   def get_Sigma_imp_iw():      
@@ -159,7 +161,7 @@ def ipt_dw_mf_set_params_and_initialize(
   dt.get_H0()
 
   print "Done initializing, about to dump..."
-  dt.dump('initial')
+  #dt.dump('initial')
 
 def ipt_dw_mf_actions(dt):
   def impurity(dt):
@@ -209,7 +211,7 @@ def ipt_dw_mf_actions(dt):
       mixers = [],#[lambda data, it: 0],
       cautionaries = [],#[lambda data, it: 0], allowed_errors = [],               
       #printout = lambda data, it: (data.dump(it) if (int(it[-3:])%5==0) else 0),
-      printout = lambda data, it: data.dump(it),
+      printout = lambda data, it: 0,#data.dump(it),
       short_timings = True
     )
   ]
@@ -282,8 +284,8 @@ def ipt_dw_mf_launcher(
     max_its = max_its,
     min_its = min_its, 
     max_it_err_is_allowed = 7,
-    print_final = True,
-    print_current = 1,
+    print_final = False,
+    print_current = 1000000,
     start_from_action_index = 1
   )
 
